@@ -28,7 +28,8 @@ AA[3]={{0,0,0}};
 AA[i_]:=AA[i]=Block[{aa=AA[i-1]},
 RandomChoice[Flatten[Table[Append[u,v],{u,aa},{v,comm[u]}],1],5]];allAnsA=Union[allAnsA,Select[AA[18],len@#==0&]];]
 While[Length@allAnsA==0,updateAllAnsA]
-ansA=RandomChoice@allAnsA
+unnormalizedAnsA=RandomChoice@allAnsA;
+ansA=Mod[unnormalizedAnsA-1,ansM]+1
 
 
 ansP=ansM/.Thread[m->p];
