@@ -12,3 +12,5 @@ test1: mnist.pkl
 test2: mnist.pkl
 	export OMP_NUM_THREADS=1; mpirun -n 3 python3 parallel.py
 
+clean:
+	rm -r __pycache__; rm *.png *.gz mnist.pkl

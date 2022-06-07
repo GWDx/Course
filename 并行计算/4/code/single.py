@@ -85,7 +85,7 @@ delta_b1 = np.zeros(200)
 eps = 1e-8
 beta1 = 0.9
 beta2 = 0.999
-batchSize = 20
+batchSize = 100
 
 
 def backward(x, loss, target):
@@ -210,6 +210,7 @@ def showPredict(allIndex):
         plt.title(f'{predicted[i]}')
         plt.axis('off')
 
+    plt.savefig(f'predicted.png')
     plt.show()
 
 
@@ -242,7 +243,7 @@ def test(epochIndex):
 
 
 logInterval = 1000
-learningRate = 0.0001
+learningRate = 0.001
 
 
 def train(epochIndex):
@@ -291,10 +292,12 @@ def train(epochIndex):
 
 startTime = time.time()
 
-for i in range(2):
+epochNumber = 5
+
+for i in range(epochNumber):
     train(i)
     test(i)
-    learningRate *= 0.99
+    learningRate *= 0.3
 
 endTime = time.time()
 timeCost = endTime - startTime
@@ -308,12 +311,16 @@ def plotLossAccuracy():
     plt.plot(np.log(testLoss), label='test')
     plt.legend()
     plt.title('loss')
+    # x ticks
+    plt.xticks([])
 
     plt.subplot(2, 1, 2)
     plt.plot(trainAccuracy, label='train')
     plt.plot(testAccuracy, label='test')
     plt.legend()
     plt.title('accuracy')
+    plt.xlabel('epoch')
+    plt.xticks(list(range(epochNumber)))
 
     # export
     plt.savefig('result.png')

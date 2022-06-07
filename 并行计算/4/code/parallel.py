@@ -42,7 +42,7 @@ def nllLoss(y, target):
 
 
 # numpy random seed
-np.random.seed(0)
+np.random.seed(rank)
 
 A1 = np.zeros((784, 200))
 b1 = np.abs(np.random.randn((200)))
@@ -85,7 +85,7 @@ v_b1 = np.zeros(200)
 eps = 1e-8
 beta1 = 0.9
 beta2 = 0.999
-batchSize = 20
+batchSize = 100
 
 
 def backward(x, target):
@@ -210,6 +210,7 @@ def showPredict(allIndex):
         plt.title(f'{predicted[i]}')
         plt.axis('off')
 
+    plt.savefig(f'predicted{size}.png')
     plt.show()
 
 
@@ -236,24 +237,22 @@ def test(epochIndex):
     accuracy = count / length
     testLoss.append(avgLoss)
     testAccuracy.append(accuracy)
-    print(f'epoch: {epochIndex:2},               loss: {avgLoss:<8.2f} accuracy: {accuracy:<8.2f}', )
+    print(f'epoch: {epochIndex:2},               loss: {avgLoss:<8.2f} accuracy: {accuracy:<8.2f}')
 
 
 def train(epochIndex):
     global delta_A3, delta_b3, delta_A2, delta_b2, delta_A1, delta_b1
     count = 0
+    sumLoss = 0
+    allCount = 0
+    allTotalLoss = 0
+    length = len(trainX)
 
     for batchIndex in range(batchCount):
         dataStartIndex = batchSize * batchIndex
 
-        for i in range(1, size):
-            subprocessStartIndex = everySubprocessTask * (i - 1) + dataStartIndex
-            subprocessEndIndex = subprocessStartIndex + everySubprocessTask
-            subprocessTrainX = trainX[subprocessStartIndex:subprocessEndIndex]
-            subprocessTrainTarget = trainTarget[subprocessStartIndex:subprocessEndIndex]
-
-            # comm broadcast
-            comm.send((A3, b3, A2, b2, A1, b1, learningRate, subprocessTrainX, subprocessTrainTarget), dest=i)
+        broadcastData = (A3, b3, A2, b2, A1, b1, learningRate)
+        comm.bcast(broadcastData, root=0)
 
         delta_A3 = np.zeros_like(A3)
         delta_b3 = np.zeros_like(b3)
@@ -263,8 +262,12 @@ def train(epochIndex):
         delta_b1 = np.zeros_like(b1)
 
         for i in range(1, size):
-            subDelta_A3, subDelta_b3, subDelta_A2, subDelta_b2, subDelta_A1, subDelta_b1, subCount = comm.recv(source=i)
+            subDelta_A3, subDelta_b3, subDelta_A2, subDelta_b2, subDelta_A1, subDelta_b1, subCount, subSumLoss = comm.recv(
+                source=i)
             count += subCount
+            sumLoss += subSumLoss
+            allCount += subCount
+            allTotalLoss += subSumLoss
 
             delta_A3 += subDelta_A3
             delta_b3 += subDelta_b3
@@ -285,10 +288,18 @@ def train(epochIndex):
         if dataStartIndex % logInterval == 0 and dataStartIndex != 0:
             # avgLoss = totalLoss / logInterval
             accuracy = count / logInterval
+            avgLoss = sumLoss / logInterval
             # totalLoss = 0
             count = 0
+            sumLoss = 0
 
-            print(f'epoch: {epochIndex:2}, index: {dataStartIndex:5}, accuracy: {accuracy:<8.2f}')
+            print(f'epoch: {epochIndex:2}, index: {dataStartIndex:5}, loss: {avgLoss:<8.2f} accuracy: {accuracy:<8.2f}')
+
+    avgLoss = allTotalLoss / length
+    accuracy = allCount / length
+    trainLoss.append(avgLoss)
+    trainAccuracy.append(accuracy)
+    print(f'epoch: {epochIndex:2},               loss: {avgLoss:<8.2f} accuracy: {accuracy:<8.2f}')
 
 
 def plotLossAccuracy():
@@ -298,64 +309,77 @@ def plotLossAccuracy():
     plt.plot(np.log(testLoss), label='test')
     plt.legend()
     plt.title('loss')
+    # x ticks
+    plt.xticks([])
 
     plt.subplot(2, 1, 2)
     plt.plot(trainAccuracy, label='train')
     plt.plot(testAccuracy, label='test')
     plt.legend()
     plt.title('accuracy')
+    plt.xlabel('epoch')
+    plt.xticks(list(range(epochNumber)))
 
     # export
-    plt.savefig('result.png')
+    plt.savefig(f'result{size}')
     plt.show()
 
 
-epochNumber = 2
+epochNumber = 5
 batchCount = len(trainX) // batchSize
 everySubprocessTask = batchSize // (size - 1)
-allBatchCount = epochNumber * batchCount
 
 if rank == 0:
     logInterval = 1000
-    learningRate = 0.0001
+    learningRate = 0.001
 
     startTime = time.time()
 
     for i in range(epochNumber):
         train(i)
         test(i)
-        learningRate *= 0.5
+        learningRate *= 0.3
 
     endTime = time.time()
     timeCost = endTime - startTime
     print(f'time cost: {timeCost:.2f}s')
 
-    # plotLossAccuracy()
+    plotLossAccuracy()
     showPredict(range(10))
 
 else:
+    for _ in range(epochNumber):
+        for batchIndex in range(batchCount):
+            delta_A3 = np.zeros_like(A3)
+            delta_b3 = np.zeros_like(b3)
+            delta_A2 = np.zeros_like(A2)
+            delta_b2 = np.zeros_like(b2)
+            delta_A1 = np.zeros_like(A1)
+            delta_b1 = np.zeros_like(b1)
 
-    for _ in range(allBatchCount):
-        delta_A3 = np.zeros_like(A3)
-        delta_b3 = np.zeros_like(b3)
-        delta_A2 = np.zeros_like(A2)
-        delta_b2 = np.zeros_like(b2)
-        delta_A1 = np.zeros_like(A1)
-        delta_b1 = np.zeros_like(b1)
+            dataStartIndex = batchSize * batchIndex
 
-        # get data
-        A3, b3, A2, b2, A1, b1, learningRate, subprocessTrainX, subprocessTrainTarget = comm.recv(source=0)
+            subprocessStartIndex = everySubprocessTask * (rank - 1) + dataStartIndex
+            subprocessEndIndex = subprocessStartIndex + everySubprocessTask
 
-        subCount = 0
-        for i in range(everySubprocessTask):
-            x = subprocessTrainX[i]
-            target = subprocessTrainTarget[i]
-            y = forward(x)
-            loss = nllLoss(y, target)
-            backward(x, target)
+            # get data
+            # A3, b3, A2, b2, A1, b1, learningRate, subprocessStartIndex, subprocessEndIndex = comm.recv(source=0)
+            A3, b3, A2, b2, A1, b1, learningRate = comm.bcast(None, root=0)
+            subprocessTrainX = trainX[subprocessStartIndex:subprocessEndIndex]
+            subprocessTrainTarget = trainTarget[subprocessStartIndex:subprocessEndIndex]
 
-            predicted = np.argmax(y)
-            if predicted == target:
-                subCount += 1
+            subCount = 0
+            subSumLoss = 0
+            for i in range(everySubprocessTask):
+                x = subprocessTrainX[i]
+                target = subprocessTrainTarget[i]
+                y = forward(x)
+                loss = nllLoss(y, target)
+                backward(x, target)
 
-        comm.send((delta_A3, delta_b3, delta_A2, delta_b2, delta_A1, delta_b1, subCount), dest=0)
+                subSumLoss += loss
+                predicted = np.argmax(y)
+                if predicted == target:
+                    subCount += 1
+
+            comm.send((delta_A3, delta_b3, delta_A2, delta_b2, delta_A1, delta_b1, subCount, subSumLoss), dest=0)
