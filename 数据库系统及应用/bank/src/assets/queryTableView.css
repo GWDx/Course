@@ -1,0 +1,26 @@
+.queryButton {
+    width: 100px;
+    height: 30px;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    border-spacing: 0;
+    border: 1px solid #ddd;
+}
+thead {
+    background: #fafafa;
+}
+thead tr {
+    border-bottom: 1px solid #ddd;
+}
+thead th {
+    padding: 10px;
+    font-weight: bold;
+    text-align: left;
+    border-right: 1px solid #ddd;
+}
+.insertInput {
+    width: 80%;
+    height: 25px;
+}
